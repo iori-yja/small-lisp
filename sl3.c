@@ -29,11 +29,18 @@
 #define cadr(p)         car(cdr(p))
 #define cdar(p)         cdr(car(p))
 #define cddr(p)         cdr(cdr(p))
-#define cadar(p)        car(cdr(car(p)))
-#define caddr(p)        car(cdr(cdr(p)))
-#define cadaar(p)       car(cdr(car(car(p))))
-#define cadddr(p)       car(cdr(cdr(cdr(p))))
-#define cddddr(p)       cdr(cdr(cdr(cdr(p))))
+
+#define caaar(p)        car(caar(p)) 
+#define cdaar(p)        cdr(caar(p)) 
+#define caadr(p)        car(cadr(p))
+#define cdadr(p)        cdr(cadr(p))
+#define cadar(p)        car(cdar(p))
+#define cddar(p)        cdr(cdar(p))
+#define caddr(p)        car(cddr(p))
+#define cdddr(p)        cdr(cddr(p))
+
+#define caaaar(p)        car(caaar(p)) 
+#define cddddr(p)        cdr(cdddr(p))
 
 int line_num = 1;
 int total_malloc = 0;

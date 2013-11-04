@@ -88,16 +88,20 @@
 
 (define is-prime
   (lambda (x)
-    (if (is-even x)
-        nil
-      (is-prime-rec x 1))))
+		(if (= 1 x)
+			nil
+			(if (= 2 x)
+				t
+				(if (is-even x)
+					nil
+					(is-prime-rec x 1))))))
                                         ; assumes x is odd
 (define is-prime-rec
   (lambda (x y)
-    (if (is-divisible x y)
-        nil
-      (if (>= y x)
-          t
+    (if (> (* y y) x)
+				t
+      (if (is-divisible x y)
+				nil
         (is-prime-rec x (+ 2 y))))))
 
 (define is-prime-on-list
