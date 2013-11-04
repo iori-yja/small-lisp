@@ -25,23 +25,6 @@
 
 #define error(X) do { fprintf(stderr, "%s\n", X); exit(1); } while (0)
 
-#define caar(p)         car(car(p))
-#define cadr(p)         car(cdr(p))
-#define cdar(p)         cdr(car(p))
-#define cddr(p)         cdr(cdr(p))
-
-#define caaar(p)        car(caar(p)) 
-#define cdaar(p)        cdr(caar(p)) 
-#define caadr(p)        car(cadr(p))
-#define cdadr(p)        cdr(cadr(p))
-#define cadar(p)        car(cdar(p))
-#define cddar(p)        cdr(cdar(p))
-#define caddr(p)        car(cddr(p))
-#define cdddr(p)        cdr(cddr(p))
-
-#define caaaar(p)        car(caaar(p)) 
-#define cddddr(p)        cdr(cdddr(p))
-
 int line_num = 1;
 int total_malloc = 0;
 
@@ -58,7 +41,7 @@ obj *all_symbols, *top_env, *nil, *tee, *quote,
 
 #define cons(X, Y)            omake(CONS, 2, (X), (Y))
 
-inline obj *car(obj *X) {
+obj *car(obj *X) {
   if(X == 0) {
     fprintf(stderr, "warning: car argument null on line %d\n", line_num);
     return nil;
@@ -66,13 +49,13 @@ inline obj *car(obj *X) {
   if(X == nil)
     return nil;
   if(X->type != CONS) {
-    fprintf(stderr, "warning: car argument not a list (%d) on line %d\n", X->p[0], X->line_num);
+    fprintf(stderr, "warning: car argument not a list (%d) on line %d\n", (int) X->p[0], (int) X->line_num);
     return nil;
   }
   return X->p[0];
 }
 
-inline obj *cdr(obj *X) {
+obj *cdr(obj *X) {
   if(X == nil)
     return nil;
   if(X->type != CONS) {
@@ -86,13 +69,30 @@ inline obj *cdr(obj *X) {
   return X->p[1];
 }
 
+
+#define caar(p)         car(car(p))
+#define cadr(p)         car(cdr(p))
+#define cdar(p)         cdr(car(p))
+#define cddr(p)         cdr(cdr(p))
+
+#define caaar(p)        car(caar(p)) 
+#define cdaar(p)        cdr(caar(p)) 
+#define caadr(p)        car(cadr(p))
+#define cdadr(p)        cdr(cadr(p))
+#define cadar(p)        car(cdar(p))
+#define cddar(p)        cdr(cdar(p))
+#define caddr(p)        car(cddr(p))
+#define cdddr(p)        cdr(cddr(p))
+
+#define caaaar(p)        car(caaar(p)) 
+#define cddddr(p)        cdr(cdddr(p))
 #define setcar(X,Y)           (((X)->p[0]) = (Y))
 #define setcdr(X,Y)           (((X)->p[1]) = (Y))
-#define mkint(X)              omake(INT, 1, (obj *)(X))
+#define mkint(X)              omake(INT, 1, (X))
 #define intval(X)             ((int)((X)->type == INT ? (X)->p[0] : 0)) // intval for INT only
-#define mksym(X)              omake(SYM, 1, (obj *)(X))
+#define mksym(X)              omake(SYM, 1, (X))
 #define symname(X)            ((char *)((X)->p[0]))
-#define mkprimop(X)           omake(PRIMOP, 1, (obj *)(X))
+#define mkprimop(X)           omake(PRIMOP, 1, (X))
 #define primopval(X)          ((primop)(X)->p[0])
 #define mkproc(X,Y,Z)         omake(PROC, 3, (X), (Y), (Z))
 #define procargs(X)           ((X)->p[0])
