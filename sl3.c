@@ -25,6 +25,16 @@
 
 #define error(X) do { fprintf(stderr, "%s\n", X); exit(1); } while (0)
 
+#define caar(p)         car(car(p))
+#define cadr(p)         car(cdr(p))
+#define cdar(p)         cdr(car(p))
+#define cddr(p)         cdr(cdr(p))
+#define cadar(p)        car(cdr(car(p)))
+#define caddr(p)        car(cdr(cdr(p)))
+#define cadaar(p)       car(cdr(car(car(p))))
+#define cadddr(p)       car(cdr(cdr(cdr(p))))
+#define cddddr(p)       cdr(cdr(cdr(cdr(p))))
+
 int line_num = 1;
 int total_malloc = 0;
 
@@ -37,7 +47,7 @@ typedef struct obj {
 } obj;
 typedef obj * (*primop)(obj *);
 obj *all_symbols, *top_env, *nil, *tee, *quote, 
-    *s_if, *s_lambda, *s_define, *s_setb, *s_begin;
+    *s_if, *s_lambda, *s_define, *s_setb, *s_begin, *s_let;
 
 #define cons(X, Y)            omake(CONS, 2, (X), (Y))
 
@@ -82,6 +92,7 @@ inline obj *cdr(obj *X) {
 #define proccode(X)           ((X)->p[1])
 #define procenv(X)            ((X)->p[2])
 #define isnil(X)              ((X) == nil)
+#define ispair(X)              (((X)->p[1]) != (nil))
 
 obj *omake(enum otype type, int count, ...) {
   obj *ret;
@@ -275,8 +286,13 @@ obj *eval(obj *exp, obj *env) {
         return mkproc(car(cdr(exp)), cdr(cdr(exp)), env);
       if(car(exp) == quote)
         return car(cdr(exp));
-      if(car(exp) == s_define)
-        return(extend_top(car(cdr(exp)),
+      if(car(exp) == s_define) {
+				if (ispair(cdar(exp))) { //sugar syntax
+					return (extend_top(cdaar(exp),
+                          eval(cons("lambda", cdr(cdr(exp))), env)));
+				}
+				else
+					return(extend_top(cdar(exp),
                           eval(car(cdr(cdr(exp))), env)));
       if(car(exp) == s_setb) {
         obj *pair   = assoc(car(cdr(exp)), env);
@@ -399,6 +415,7 @@ void init_sl3() {
   s_define = intern("define");
   s_setb   = intern("set!");
   s_begin  = intern("begin");
+  s_let    = intern("let");
   extend_top(intern("+"), mkprimop(prim_sum));
   extend_top(intern("-"), mkprimop(prim_sub));
   extend_top(intern("*"), mkprimop(prim_prod));
