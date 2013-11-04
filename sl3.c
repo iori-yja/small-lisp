@@ -92,7 +92,7 @@ inline obj *cdr(obj *X) {
 #define proccode(X)           ((X)->p[1])
 #define procenv(X)            ((X)->p[2])
 #define isnil(X)              ((X) == nil)
-#define ispair(X)              (((X)->p[1]) != (nil))
+#define ispair(X)             (((X)->p[1]) != (nil))
 
 obj *omake(enum otype type, int count, ...) {
   obj *ret;
@@ -287,13 +287,16 @@ obj *eval(obj *exp, obj *env) {
       if(car(exp) == quote)
         return car(cdr(exp));
       if(car(exp) == s_define) {
-				if (ispair(cdar(exp))) { //sugar syntax
-					return (extend_top(cdaar(exp),
-                          eval(cons("lambda", cdr(cdr(exp))), env)));
+				if (!isnil(cdr(cadr(exp)))) { //sugar syntax
+					return (extend_top(caar(cdr(exp)),
+                          eval(cons(s_lambda, cons(cdr(cadr(exp)), cddr(exp))),
+														env)));
 				}
-				else
-					return(extend_top(cdar(exp),
+				else {
+					return(extend_top(cadr(exp),
                           eval(car(cdr(cdr(exp))), env)));
+				}
+			}
       if(car(exp) == s_setb) {
         obj *pair   = assoc(car(cdr(exp)), env);
         obj *newval = eval(car(cdr(cdr(exp))), env);
