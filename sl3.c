@@ -361,7 +361,7 @@ obj *eval(obj *exp, obj *env) {
       proc = eval(car(exp), env);
       vals = evlis(cdr(exp), env);
       if(proc->type == PRIMOP)
-        return (*primopval(proc->object.primop))(vals);
+        return (*primopval(proc))(vals);
       if(proc->type == PROC) {
         /* For dynamic scope, use env instead of procenv(proc) */
         env = multiple_extend(procenv(proc), procargs(proc), vals);
