@@ -35,6 +35,7 @@ typedef struct obj {
   int line_num;
 	union {
 		int integer;
+		double real;
 		char *symbol;
 		struct obj *primop;
 		struct obj *proc[3];
