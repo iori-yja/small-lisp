@@ -72,7 +72,10 @@ obj *cdr(obj *X) {
     fprintf(stderr, "error: cdr list element is zero-pointer at %d\n", X->line_num);
     return nil;
   }
-  return X->p[1];
+	if (X->type == PROC)
+		return X->object.proc[1];
+	else
+		return X->p[1];
 }
 
 
@@ -101,9 +104,9 @@ obj *cdr(obj *X) {
 #define mkprimop(X)           omake(PRIMOP, 1, (X))
 #define primopval(X)          ((primop)(X)->object.primop)
 #define mkproc(X,S,ENV)         omake(PROC, 3, (X), (S), (ENV))
-#define procargs(X)           ((X)->p[0])
-#define proccode(X)           ((X)->p[1])
-#define procenv(X)            ((X)->p[2])
+#define procargs(X)           ((X)->object.proc[0])
+#define proccode(X)           ((X)->object.proc[1])
+#define procenv(X)            ((X)->object.proc[2])
 #define isnil(X)              ((X) == nil)
 #define ispair(X)             (((X)->p[1]) != (nil))
 
@@ -358,7 +361,7 @@ obj *eval(obj *exp, obj *env) {
       proc = eval(car(exp), env);
       vals = evlis(cdr(exp), env);
       if(proc->type == PRIMOP)
-        return (*primopval(proc))(vals);
+        return (*primopval(proc->object.primop))(vals);
       if(proc->type == PROC) {
         /* For dynamic scope, use env instead of procenv(proc) */
         env = multiple_extend(procenv(proc), procargs(proc), vals);
