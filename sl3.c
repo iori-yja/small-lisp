@@ -33,7 +33,13 @@ enum otype { INT, SYM, CONS, PROC, PRIMOP };
 typedef struct obj {
   enum otype type;
   int line_num;
-  struct obj *p[1];
+	union {
+		int integer;
+		char *symbol;
+		struct obj *primop;
+		struct obj *proc[3];
+	} object;
+  struct obj *p[2];
 } obj;
 typedef obj * (*primop)(obj *);
 obj *all_symbols, *top_env, *nil, *tee, *quote, 
@@ -49,7 +55,7 @@ obj *car(obj *X) {
   if(X == nil)
     return nil;
   if(X->type != CONS) {
-    fprintf(stderr, "warning: car argument not a list (%d) on line %d\n", (int) X->p[0], (int) X->line_num);
+    fprintf(stderr, "warning: car argument not a list (%d) on line %d\n", (int) X->object.integer, (int) X->line_num);
     return nil;
   }
   return X->p[0];
@@ -89,12 +95,12 @@ obj *cdr(obj *X) {
 #define setcar(X,Y)           (((X)->p[0]) = (Y))
 #define setcdr(X,Y)           (((X)->p[1]) = (Y))
 #define mkint(X)              omake(INT, 1, (X))
-#define intval(X)             ((int)((X)->type == INT ? (X)->p[0] : 0)) // intval for INT only
+#define intval(X)             ((int)((X)->type == INT ? (X)->object.integer : 0)) // intval for INT only
 #define mksym(X)              omake(SYM, 1, (X))
-#define symname(X)            ((char *)((X)->p[0]))
+#define symname(X)            ((char *)((X)->object.symbol))
 #define mkprimop(X)           omake(PRIMOP, 1, (X))
-#define primopval(X)          ((primop)(X)->p[0])
-#define mkproc(X,Y,Z)         omake(PROC, 3, (X), (Y), (Z))
+#define primopval(X)          ((primop)(X)->object.primop)
+#define mkproc(X,S,ENV)         omake(PROC, 3, (X), (S), (ENV))
 #define procargs(X)           ((X)->p[0])
 #define proccode(X)           ((X)->p[1])
 #define procenv(X)            ((X)->p[2])
@@ -112,16 +118,36 @@ obj *omake(enum otype type, int count, ...) {
   ret = (obj *) malloc(object_size);
   ret->type = type;
   ret->line_num = line_num;
-  for(i = 0; i < count; i++) ret->p[i] = va_arg(ap, obj *);
+  for(i = 0; i < count; i++) {
+		switch (type) {
+			case INT:
+				ret->object.integer = va_arg(ap, int);
+				break;
+			case SYM:
+				ret->object.symbol = va_arg(ap, char *);
+				break;
+			case PRIMOP:
+				ret->object.primop = va_arg(ap, obj *);
+				break;
+			case PROC:
+				ret->object.proc[i] = va_arg(ap, obj *);
+				break;
+			default:
+				ret->p[i] = va_arg(ap, obj *);
+				break;
+		}
+	}
   va_end(ap);
   return ret;
 }
 
 obj *findsym(char *name) {
   obj *symlist;
+	char *sym;
   for(symlist = all_symbols; !isnil(symlist); symlist = cdr(symlist))
-    if(!strcmp(name, symname(car(symlist))))
-      return symlist;
+    if (NULL != (sym = symname(car(symlist))) && !isnil(car(symlist)))
+			if(!strcmp(name, sym))
+				return symlist;
   return nil;
 }
 
@@ -174,11 +200,16 @@ char *gettoken() {
   char comment=0;
 
   bufused = 0;
-  if(la_valid) { la_valid = 0; return token_la; }
+  if(la_valid) {
+		la_valid = 0;
+		return token_la;
+	}
   do {
-    if((ch = getc(ifp)) == EOF) myexit(0);
+    if((ch = getc(ifp)) == EOF)
+			myexit(0);
 
-    if(ch == ';')      comment = 1;
+    if(ch == ';')
+			comment = 1;
     if(ch == '\n') {
       comment = 0;
       line_num++;
@@ -200,6 +231,7 @@ char *gettoken() {
 }
 
 obj *readlist();
+
 obj *readobj() {
   char *token;
 
@@ -208,7 +240,7 @@ obj *readobj() {
   if(!strcmp(token, "\'")) return cons(quote, cons(readobj(), nil));
 
   if(token[strspn(token, "0123456789")] == '\0'
-     || (token[0] == '-' && strlen(token) > 1)) 
+     || (token[0] == '-' && strlen(token) > 1)) //!!!
     return mkint(atoi(token));
   return intern(token);
 }
@@ -269,8 +301,11 @@ obj *eval(obj *exp, obj *env) {
   if(exp == nil) return nil;
 
   switch(exp->type) {
-    case INT:   return exp;
-    case SYM:   tmp = assoc(exp, env);
+    case INT:
+			return exp;
+
+    case SYM:
+			tmp = assoc(exp, env);
 
       if(tmp == nil) {
         fprintf(stderr, "Unbound symbol ");
@@ -279,8 +314,6 @@ obj *eval(obj *exp, obj *env) {
         return nil;
       }
       return cdr(tmp);
-
-
 
     case CONS: 
       if(car(exp) == s_if) {
@@ -415,6 +448,7 @@ obj *prim_print(obj *args) {
 /*** Initialization ***/
 void init_sl3() {
   nil = mksym("nil");
+
   all_symbols = cons(nil, nil);
   top_env  = cons(cons(nil, nil), nil);
   tee      = intern("t");
