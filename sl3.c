@@ -49,13 +49,13 @@ obj *all_symbols, *top_env, *nil, *tee, *quote,
 #define cons(X, Y)            omake(CONS, 2, (X), (Y))
 
 obj *car(obj *X) {
-  if(X == 0) {
+  if (X == 0) {
     fprintf(stderr, "warning: car argument null on line %d\n", line_num);
     return nil;
   }
-  if(X == nil)
+  if (X == nil)
     return nil;
-  if(X->type != CONS) {
+  if (X->type != CONS) {
     fprintf(stderr, "warning: car argument not a list (%d) on line %d\n", (int) X->object.integer, (int) X->line_num);
     return nil;
   }
@@ -63,13 +63,13 @@ obj *car(obj *X) {
 }
 
 obj *cdr(obj *X) {
-  if(X == nil)
+  if (X == nil)
     return nil;
-  if(X->type != CONS) {
+  if (X->type != CONS) {
     fprintf(stderr, "warning: cdr argument not a list on line %d\n", X->line_num); 
     return nil;    
   }
-  if(X->p[1] == 0) {
+  if (X->p[1] == 0) {
     fprintf(stderr, "error: cdr list element is zero-pointer at %d\n", X->line_num);
     return nil;
   }
@@ -150,14 +150,14 @@ obj *findsym(char *name) {
 	char *sym;
   for(symlist = all_symbols; !isnil(symlist); symlist = cdr(symlist))
     if (NULL != (sym = symname(car(symlist))) && !isnil(car(symlist)))
-			if(!strcmp(name, sym))
+			if (!strcmp(name, sym))
 				return symlist;
   return nil;
 }
 
 obj *intern(char *name) {
   obj *op = findsym(name);
-  if(!isnil(op)) return car(op);
+  if (!isnil(op)) return car(op);
   op = mksym(name);
   all_symbols = cons(op, all_symbols);
   return op;
@@ -179,8 +179,8 @@ obj *extend_top(obj *sym, obj *val) {
 }
 
 obj *assoc(obj *key, obj *alist) {
-  if(isnil(alist)) return nil;
-  if(car(car(alist)) == key) return car(alist);
+  if (isnil(alist)) return nil;
+  if (car(car(alist)) == key) return car(alist);
   return assoc(key, cdr(alist));
 }
 
@@ -192,7 +192,7 @@ int la_valid = 0;
 char buf[MAXLEN];
 int bufused;
 
-void add_to_buf(char ch) { if(bufused < MAXLEN - 1) buf[bufused++] = ch; }
+void add_to_buf(char ch) { if (bufused < MAXLEN - 1) buf[bufused++] = ch; }
 char *buf2str()          { buf[bufused++] = '\0'; return strdup(buf); }
 void setinput(FILE *fp)  { ifp = fp; }
 void putback_token(char *token) { token_la = token; la_valid = 1; }
@@ -204,17 +204,17 @@ char *gettoken() {
   char comment=0;
 
   bufused = 0;
-  if(la_valid) {
+  if (la_valid) {
 		la_valid = 0;
 		return token_la;
 	}
   do {
-    if((ch = getc(ifp)) == EOF)
+    if ((ch = getc(ifp)) == EOF)
 			myexit(0);
 
-    if(ch == ';')
+    if (ch == ';')
 			comment = 1;
-    if(ch == '\n') {
+    if (ch == '\n') {
       comment = 0;
       line_num++;
     }
@@ -223,10 +223,10 @@ char *gettoken() {
 
 
   add_to_buf(ch);
-  if(strchr("()\'", ch)) return buf2str();
+  if (strchr("()\'", ch)) return buf2str();
   for(;;) {
-    if((ch = getc(ifp)) == EOF) myexit(0);
-    if(strchr("()\'", ch) || isspace(ch)) {
+    if ((ch = getc(ifp)) == EOF) myexit(0);
+    if (strchr("()\'", ch) || isspace(ch)) {
       ungetc(ch, ifp);
       return buf2str();
     }
@@ -240,10 +240,10 @@ obj *readobj() {
   char *token;
 
   token = gettoken();
-  if(!strcmp(token, "(")) return readlist();
-  if(!strcmp(token, "\'")) return cons(quote, cons(readobj(), nil));
+  if (!strcmp(token, "(")) return readlist();
+  if (!strcmp(token, "\'")) return cons(quote, cons(readobj(), nil));
 
-  if(token[strspn(token, "0123456789")] == '\0'
+  if (token[strspn(token, "0123456789")] == '\0'
      || (token[0] == '-' && strlen(token) > 1)) //!!!
     return mkint(atoi(token));
   return intern(token);
@@ -252,10 +252,10 @@ obj *readobj() {
 obj *readlist() {
   char *token = gettoken();
   obj *tmp;
-  if(!strcmp(token, ")")) return nil;
-  if(!strcmp(token, ".")) {
+  if (!strcmp(token, ")")) return nil;
+  if (!strcmp(token, ".")) {
     tmp = readobj();
-    if(strcmp(gettoken(), ")")) exit(1);
+    if (strcmp(gettoken(), ")")) exit(1);
     return tmp;
   }
   putback_token(token);
@@ -270,12 +270,12 @@ void writeobj(FILE *ofp, obj *op) {
 		fprintf(ofp, "(");
 		for(;;) {
 			writeobj(ofp, car(op));
-			if(isnil(cdr(op))) {
+			if (isnil(cdr(op))) {
 				fprintf(ofp, ")");
 				break;
 			}
 			op = cdr(op);
-			if(op->type != CONS) {
+			if (op->type != CONS) {
 				fprintf(ofp, " . ");
 				writeobj(ofp, op);
 				fprintf(ofp, ")");
@@ -285,7 +285,7 @@ void writeobj(FILE *ofp, obj *op) {
 		}
 		break;
     case SYM:
-		if(isnil(op)) fprintf(ofp, "()");
+		if (isnil(op)) fprintf(ofp, "()");
 		else          fprintf(ofp, "%s", symname(op));
 		break;
     case PRIMOP: fprintf(ofp, "#<PRIMOP>"); break;
@@ -302,16 +302,18 @@ obj *eval(obj *exp, obj *env) {
 
   eval_start:
   
-  if(exp == nil) return nil;
+  if (exp == nil)
+		return nil;
 
-  switch(exp->type) {
+  switch (exp->type) {
     case INT:
 			return exp;
 
     case SYM:
 			tmp = assoc(exp, env);
 
-      if(tmp == nil) {
+debug:
+      if (tmp == nil) {
         fprintf(stderr, "Unbound symbol ");
         writeobj(stderr, exp);
         fprintf(stderr, "\n");
@@ -320,17 +322,17 @@ obj *eval(obj *exp, obj *env) {
       return cdr(tmp);
 
     case CONS: 
-      if(car(exp) == s_if) {
-        if(eval(car(cdr(exp)), env) != nil)
+      if (car(exp) == s_if) {
+        if (eval(car(cdr(exp)), env) != nil)
           return eval(car(cdr(cdr(exp))), env);
         else
           return eval(car(cdr(cdr(cdr(exp)))), env);
       }
-      if(car(exp) == s_lambda)
+      if (car(exp) == s_lambda)
         return mkproc(car(cdr(exp)), cdr(cdr(exp)), env);
-      if(car(exp) == quote)
+      if (car(exp) == quote)
         return car(cdr(exp));
-      if(car(exp) == s_define) {
+      if (car(exp) == s_define) {
 				if (!isnil(cdr(cadr(exp)))) { //sugar syntax
 					return (extend_top(caar(cdr(exp)),
                           eval(cons(s_lambda, cons(cdr(cadr(exp)), cddr(exp))),
@@ -341,17 +343,17 @@ obj *eval(obj *exp, obj *env) {
                           eval(car(cdr(cdr(exp))), env)));
 				}
 			}
-      if(car(exp) == s_setb) {
+      if (car(exp) == s_setb) {
         obj *pair   = assoc(car(cdr(exp)), env);
         obj *newval = eval(car(cdr(cdr(exp))), env);
         setcdr(pair, newval);
         return newval;
       }
-      if(car(exp) == s_begin) {
+      if (car(exp) == s_begin) {
         exp = cdr(exp);
-        if(exp == nil) return nil;
+        if (exp == nil) return nil;
         for(;;) {
-          if(cdr(exp) == nil) {
+          if (cdr(exp) == nil) {
             exp = car(exp);
             goto eval_start;
           }
@@ -361,9 +363,9 @@ obj *eval(obj *exp, obj *env) {
       }
       proc = eval(car(exp), env);
       vals = evlis(cdr(exp), env);
-      if(proc->type == PRIMOP)
+      if (proc->type == PRIMOP)
         return (*primopval(proc))(vals);
-      if(proc->type == PROC) {
+      if (proc->type == PROC) {
         /* For dynamic scope, use env instead of procenv(proc) */
         env = multiple_extend(procenv(proc), procargs(proc), vals);
         exp = cons(s_begin, proccode(proc));
@@ -379,7 +381,7 @@ obj *eval(obj *exp, obj *env) {
 }
 
 obj *evlis(obj *exps, obj *env) {
-  if(exps == nil) return nil;
+  if (exps == nil) return nil;
   return cons(eval(car(exps), env), 
               evlis(cdr(exps), env));
 }
