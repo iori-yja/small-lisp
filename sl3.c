@@ -43,7 +43,7 @@ typedef struct obj {
   struct obj *p[2];
 } obj;
 typedef obj * (*primop)(obj *);
-obj *all_symbols, *top_env, *nil, *tee, *quote, 
+obj *all_symbols, *top_env, *nil, *tee, *ef, *quote, 
     *s_if, *s_lambda, *s_define, *s_setb, *s_begin, *s_let;
 
 #define cons(X, Y)            omake(CONS, 2, (X), (Y))
@@ -148,10 +148,16 @@ obj *omake(enum otype type, int count, ...) {
 obj *findsym(char *name) {
   obj *symlist;
 	char *sym;
-  for(symlist = all_symbols; !isnil(symlist); symlist = cdr(symlist))
-    if (NULL != (sym = symname(car(symlist))) && !isnil(car(symlist)))
+  for(symlist = all_symbols; !isnil(symlist); symlist = cdr(symlist)) {
+		if (car(symlist)->type != SYM) {
+			fprintf(stderr, "assertion fail, not symbol list is broken");
+			exit(1);
+		}
+    if (NULL != (sym = symname(car(symlist))) && !isnil(car(symlist))) {
 			if (!strcmp(name, sym))
 				return symlist;
+		}
+	}
   return nil;
 }
 
@@ -246,6 +252,13 @@ obj *readobj() {
   if (token[strspn(token, "0123456789")] == '\0'
      || (token[0] == '-' && strlen(token) > 1)) //!!!
     return mkint(atoi(token));
+
+	if (!strcmp(token, "nil")) return nil;
+	else if (!strcmp(token, "#t")) return tee;
+	else if (!strcmp(token, "#f")) {
+		printf("Igot ef");
+		return ef;
+	}
   return intern(token);
 }
 
@@ -301,19 +314,20 @@ obj *eval(obj *exp, obj *env) {
   obj *tmp, *proc, *vals;
 
   eval_start:
-  
+
   if (exp == nil)
 		return nil;
 
   switch (exp->type) {
-    case INT:
+		case INT:
 			return exp;
 
-    case SYM:
+		case SYM:
 			tmp = assoc(exp, env);
 
-debug:
-      if (tmp == nil) {
+			if (tmp == nil) {
+debb:
+				findsym("#f");
         fprintf(stderr, "Unbound symbol ");
         writeobj(stderr, exp);
         fprintf(stderr, "\n");
@@ -418,20 +432,24 @@ obj *prim_divide(obj *args) {
 }
 
 obj *prim_gt(obj *args) {
-  return intval(car(args)) > intval(car(cdr(args))) ? tee : nil;
+  return intval(car(args)) > intval(car(cdr(args))) ? tee : ef;
 }
 
 obj *prim_lt(obj *args) {
-  return intval(car(args)) < intval(car(cdr(args))) ? tee : nil;
+  return intval(car(args)) < intval(car(cdr(args))) ? tee : ef;
 }
 obj *prim_ge(obj *args) {
-  return intval(car(args)) >= intval(car(cdr(args))) ? tee : nil;
+  return intval(car(args)) >= intval(car(cdr(args))) ? tee : ef;
 }
 obj *prim_le(obj *args) {
-  return intval(car(args)) <= intval(car(cdr(args))) ? tee : nil;
+  return intval(car(args)) <= intval(car(cdr(args))) ? tee : ef;
 }
 obj *prim_numeq(obj *args) {
-  return intval(car(args)) == intval(car(cdr(args))) ? tee : nil;
+  return intval(car(args)) == intval(car(cdr(args))) ? tee : ef;
+}
+obj *prim_symtable(obj *args) {
+	writeobj(stderr,all_symbols);
+	return nil;
 }
 
 obj *prim_cons(obj *args) { return cons(car(args), car(cdr(args))); }
@@ -457,7 +475,7 @@ void init_sl3() {
 
   all_symbols = cons(nil, nil);
   top_env  = cons(cons(nil, nil), nil);
-  tee      = intern("t");
+  tee      = intern("#t");
   extend_top(tee, tee);
   quote    = intern("quote");
   s_if     = intern("if");
@@ -466,6 +484,7 @@ void init_sl3() {
   s_setb   = intern("set!");
   s_begin  = intern("begin");
   s_let    = intern("let");
+  ef       = intern("#f");
   extend_top(intern("+"), mkprimop(prim_sum));
   extend_top(intern("-"), mkprimop(prim_sub));
   extend_top(intern("*"), mkprimop(prim_prod));
@@ -483,6 +502,7 @@ void init_sl3() {
   extend_top(intern("cdr"),  mkprimop(prim_cdr));
 
   extend_top(intern("print"),  mkprimop(prim_print));
+  extend_top(intern("symtable"), mkprimop(prim_symtable));
 }
 
 /*** Main Driver ***/
