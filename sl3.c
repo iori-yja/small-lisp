@@ -29,7 +29,7 @@ int line_num = 1;
 int total_malloc = 0;
 
 /*** List Structured Memory ***/
-enum otype { INT, SYM, CONS, PROC, PRIMOP };
+enum otype { NIL, TEE, COFFEE, INT, REAL, SYM, CONS, PROC, PRIMOP };
 typedef struct obj {
   enum otype type;
   int line_num;
@@ -43,7 +43,7 @@ typedef struct obj {
   struct obj *p[2];
 } obj;
 typedef obj * (*primop)(obj *);
-obj *all_symbols, *top_env, *nil, *tee, *ef, *quote, 
+obj *all_symbols, *top_env, *nil, *tee, *coffee, *quote, 
     *s_if, *s_lambda, *s_define, *s_setb, *s_begin, *s_let;
 
 #define cons(X, Y)            omake(CONS, 2, (X), (Y))
@@ -98,73 +98,95 @@ obj *cdr(obj *X) {
 #define cddddr(p)        cdr(cdddr(p))
 #define setcar(X,Y)           (((X)->p[0]) = (Y))
 #define setcdr(X,Y)           (((X)->p[1]) = (Y))
+
+#define mknil()               omake(NIL, 0)
+#define isnil(X)              ((X)->type == NIL)
+
+#define mktee()               omake(TEE, 0)
+#define istee(X)              ((X)->type == TEE)
+
+#define mkcoffee()            omake(COFFEE, 0)
+#define iscoffee(X)           ((X)->type == COFFEE)
+
 #define mkint(X)              omake(INT, 1, (X))
 #define intval(X)             ((int)((X)->type == INT ? (X)->object.integer : 0)) // intval for INT only
+
 #define mksym(X)              omake(SYM, 1, (X))
 #define symname(X)            ((char *)((X)->object.symbol))
+
 #define mkprimop(X)           omake(PRIMOP, 1, (X))
 #define primopval(X)          ((primop)(X)->object.primop)
+
 #define mkproc(X,S,ENV)         omake(PROC, 3, (X), (S), (ENV))
 #define procargs(X)           ((X)->object.proc[0])
 #define proccode(X)           ((X)->object.proc[1])
 #define procenv(X)            ((X)->object.proc[2])
-#define isnil(X)              ((X) == nil)
+
 #define ispair(X)             (((X)->p[1]) != (nil))
 
 obj *omake(enum otype type, int count, ...) {
-  obj *ret;
+  obj *newobj;
   va_list ap;
   int i;
   va_start(ap, count);
   int object_size = sizeof(obj) + (count - 1)*sizeof(obj *);
   total_malloc += object_size;
 
-  ret = (obj *) malloc(object_size);
-  ret->type = type;
-  ret->line_num = line_num;
-  for(i = 0; i < count; i++) {
+  newobj = (obj *) malloc(object_size);
+  newobj->type = type;
+  newobj->line_num = line_num;
+  for (i = 0; i < count; i++) {
 		switch (type) {
+			case NIL:
+			case TEE:
+			case COFFEE:
+				fprintf(stderr, "nil, tee, coffee won't take any args\n");
+				break;
 			case INT:
-				ret->object.integer = va_arg(ap, int);
+				newobj->object.integer = va_arg(ap, int);
 				break;
 			case SYM:
-				ret->object.symbol = va_arg(ap, char *);
+				newobj->object.symbol = va_arg(ap, char *);
 				break;
 			case PRIMOP:
-				ret->object.primop = va_arg(ap, obj *);
+				newobj->object.primop = va_arg(ap, obj *);
 				break;
 			case PROC:
-				ret->object.proc[i] = va_arg(ap, obj *);
+				newobj->object.proc[i] = va_arg(ap, obj *);
 				break;
 			default:
-				ret->p[i] = va_arg(ap, obj *);
+				newobj->p[i] = va_arg(ap, obj *);
 				break;
 		}
 	}
   va_end(ap);
-  return ret;
+  return newobj;
 }
 
-obj *findsym(char *name) {
+obj *findsym(char *keyword) {
   obj *symlist;
 	char *sym;
-  for(symlist = all_symbols; !isnil(symlist); symlist = cdr(symlist)) {
-		if (car(symlist)->type != SYM) {
-			fprintf(stderr, "assertion fail, not symbol list is broken");
-			exit(1);
-		}
+
+	if (!strcmp(keyword, "nil"))
+		return nil;
+	if (!strcmp(keyword, "tee"))
+		return tee;
+	if (!strcmp(keyword, "coffee"))
+		return coffee;
+
+  for (symlist = all_symbols; !isnil(symlist); symlist = cdr(symlist)) {
     if (NULL != (sym = symname(car(symlist))) && !isnil(car(symlist))) {
-			if (!strcmp(name, sym))
+			if (!strcmp(keyword, sym))
 				return symlist;
 		}
 	}
   return nil;
 }
 
-obj *intern(char *name) {
-  obj *op = findsym(name);
+obj *intern(char *newsymbol) {
+  obj *op = findsym(newsymbol);
   if (!isnil(op)) return car(op);
-  op = mksym(name);
+  op = mksym(newsymbol);
   all_symbols = cons(op, all_symbols);
   return op;
 }
@@ -253,12 +275,8 @@ obj *readobj() {
      || (token[0] == '-' && strlen(token) > 1)) //!!!
     return mkint(atoi(token));
 
-	if (!strcmp(token, "nil")) return nil;
-	else if (!strcmp(token, "#t")) return tee;
-	else if (!strcmp(token, "#f")) {
-		printf("Igot ef");
-		return ef;
-	}
+	if (!strcmp(token, "#f")) return coffee;
+	if (!strcmp(token, "#t")) return tee;
   return intern(token);
 }
 
@@ -278,6 +296,18 @@ obj *readlist() {
 
 void writeobj(FILE *ofp, obj *op) {
   switch(op->type) {
+		case NIL:
+		fprintf(ofp, "()");
+		break;
+
+		case TEE:
+		fprintf(ofp, "#t");
+		break;
+
+		case COFFEE:
+		fprintf(ofp, "#f");
+		break;
+
     case INT:  fprintf(ofp, "%d", intval(op)); break;
     case CONS: 
 		fprintf(ofp, "(");
@@ -311,14 +341,23 @@ void writeobj(FILE *ofp, obj *op) {
 obj *evlis(obj *exps, obj *env);
 
 obj *eval(obj *exp, obj *env) {
-  obj *tmp, *proc, *vals;
+obj *tmp, *proc, *vals;
 
   eval_start:
 
   if (exp == nil)
 		return nil;
 
-  switch (exp->type) {
+	switch (exp->type) {
+		case NIL:
+			return nil;
+
+		case TEE:
+			return tee;
+
+		case COFFEE:
+			return coffee;
+
 		case INT:
 			return exp;
 
@@ -326,8 +365,7 @@ obj *eval(obj *exp, obj *env) {
 			tmp = assoc(exp, env);
 
 			if (tmp == nil) {
-debb:
-				findsym("#f");
+	debb:
         fprintf(stderr, "Unbound symbol ");
         writeobj(stderr, exp);
         fprintf(stderr, "\n");
@@ -337,7 +375,7 @@ debb:
 
     case CONS: 
       if (car(exp) == s_if) {
-        if (eval(car(cdr(exp)), env) != nil)
+        if (eval(car(cdr(exp)), env) != coffee)
           return eval(car(cdr(cdr(exp))), env);
         else
           return eval(car(cdr(cdr(cdr(exp)))), env);
@@ -420,6 +458,7 @@ obj *prim_prod(obj *args) {
   for(prod = 1; !isnil(args); prod *= intval(car(args)), args = cdr(args));
   return mkint(prod);
 }
+
 obj *prim_divide(obj *args) {
   int prod = intval(car(args));
   args = cdr(args);
@@ -432,29 +471,41 @@ obj *prim_divide(obj *args) {
 }
 
 obj *prim_gt(obj *args) {
-  return intval(car(args)) > intval(car(cdr(args))) ? tee : ef;
+  return intval(car(args)) > intval(car(cdr(args))) ? tee : coffee;
 }
 
 obj *prim_lt(obj *args) {
-  return intval(car(args)) < intval(car(cdr(args))) ? tee : ef;
+  return intval(car(args)) < intval(car(cdr(args))) ? tee : coffee;
 }
 obj *prim_ge(obj *args) {
-  return intval(car(args)) >= intval(car(cdr(args))) ? tee : ef;
+  return intval(car(args)) >= intval(car(cdr(args))) ? tee : coffee;
 }
 obj *prim_le(obj *args) {
-  return intval(car(args)) <= intval(car(cdr(args))) ? tee : ef;
+  return intval(car(args)) <= intval(car(cdr(args))) ? tee : coffee;
 }
 obj *prim_numeq(obj *args) {
-  return intval(car(args)) == intval(car(cdr(args))) ? tee : ef;
+  return intval(car(args)) == intval(car(cdr(args))) ? tee : coffee;
 }
 obj *prim_symtable(obj *args) {
 	writeobj(stderr,all_symbols);
 	return nil;
 }
 
-obj *prim_cons(obj *args) { return cons(car(args), car(cdr(args))); }
-obj *prim_car(obj *args)  { return car(car(args)); }
-obj *prim_cdr(obj *args)  { return cdr(car(args)); }
+obj *prim_cons(obj *args) {
+	return cons(car(args), car(cdr(args)));
+}
+
+obj *prim_car(obj *args)  {
+	return car(car(args));
+}
+
+obj *prim_cdr(obj *args)  {
+	return cdr(car(args));
+}
+
+obj *prim_nullcheck(obj *args) {
+  return isnil(car(args)) ? tee : coffee;
+}
 
 
 /*** Helpers *****/
@@ -471,11 +522,12 @@ obj *prim_print(obj *args) {
 
 /*** Initialization ***/
 void init_sl3() {
-  nil = mksym("nil");
+  nil = mknil();
 
   all_symbols = cons(nil, nil);
   top_env  = cons(cons(nil, nil), nil);
-  tee      = intern("#t");
+  tee      = mktee();
+  coffee   = mkcoffee();
   extend_top(tee, tee);
   quote    = intern("quote");
   s_if     = intern("if");
@@ -484,7 +536,6 @@ void init_sl3() {
   s_setb   = intern("set!");
   s_begin  = intern("begin");
   s_let    = intern("let");
-  ef       = intern("#f");
   extend_top(intern("+"), mkprimop(prim_sum));
   extend_top(intern("-"), mkprimop(prim_sub));
   extend_top(intern("*"), mkprimop(prim_prod));
@@ -500,6 +551,7 @@ void init_sl3() {
   extend_top(intern("cons"), mkprimop(prim_cons));
   extend_top(intern("car"),  mkprimop(prim_car));
   extend_top(intern("cdr"),  mkprimop(prim_cdr));
+  extend_top(intern("null?"),  mkprimop(prim_nullcheck));
 
   extend_top(intern("print"),  mkprimop(prim_print));
   extend_top(intern("symtable"), mkprimop(prim_symtable));
@@ -513,6 +565,7 @@ int main() {
     writeobj(stdout, eval(readobj(), top_env));
     printf("\n");
   }
+	printf("bye");
   return 0;
 }
 
