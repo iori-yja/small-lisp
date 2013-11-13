@@ -29,18 +29,22 @@ int line_num = 1;
 int total_malloc = 0;
 
 /*** List Structured Memory ***/
-enum otype { NIL, TEE, COFFEE, INT, REAL, SYM, CONS, PROC, PRIMOP };
+enum otype { NIL, TEE, COFFEE, INT, REAL, RATIONAL, SYM, CONS, PROC, PRIMOP };
 typedef struct obj {
   enum otype type;
   int line_num;
 	union {
 		int integer;
 		double real;
+		struct {
+			int num;
+			unsigned int denomi;
+		} rational;
 		char *symbol;
 		struct obj *primop;
 		struct obj *proc[3];
+		struct obj *p[2];
 	} object;
-  struct obj *p[2];
 } obj;
 typedef obj * (*primop)(obj *);
 obj *all_symbols, *top_env, *nil, *tee, *coffee, *quote, 
@@ -59,7 +63,7 @@ obj *car(obj *X) {
     fprintf(stderr, "warning: car argument not a list (%d) on line %d\n", (int) X->object.integer, (int) X->line_num);
     return nil;
   }
-  return X->p[0];
+  return X->object.p[0];
 }
 
 obj *cdr(obj *X) {
@@ -69,14 +73,14 @@ obj *cdr(obj *X) {
     fprintf(stderr, "warning: cdr argument not a list on line %d\n", X->line_num); 
     return nil;    
   }
-  if (X->p[1] == 0) {
+  if (X->object.p[1] == 0) {
     fprintf(stderr, "error: cdr list element is zero-pointer at %d\n", X->line_num);
     return nil;
   }
 	if (X->type == PROC)
 		return X->object.proc[1];
 	else
-		return X->p[1];
+		return X->object.p[1];
 }
 
 
@@ -96,8 +100,8 @@ obj *cdr(obj *X) {
 
 #define caaaar(p)        car(caaar(p)) 
 #define cddddr(p)        cdr(cdddr(p))
-#define setcar(X,Y)           (((X)->p[0]) = (Y))
-#define setcdr(X,Y)           (((X)->p[1]) = (Y))
+#define setcar(X,Y)           (((X)->object.p[0]) = (Y))
+#define setcdr(X,Y)           (((X)->object.p[1]) = (Y))
 
 #define mknil()               omake(NIL, 0)
 #define isnil(X)              ((X)->type == NIL)
@@ -117,12 +121,12 @@ obj *cdr(obj *X) {
 #define mkprimop(X)           omake(PRIMOP, 1, (X))
 #define primopval(X)          ((primop)(X)->object.primop)
 
-#define mkproc(X,S,ENV)         omake(PROC, 3, (X), (S), (ENV))
+#define mkproc(X,S,ENV)       omake(PROC, 3, (X), (S), (ENV))
 #define procargs(X)           ((X)->object.proc[0])
 #define proccode(X)           ((X)->object.proc[1])
 #define procenv(X)            ((X)->object.proc[2])
 
-#define ispair(X)             (((X)->p[1]) != (nil))
+#define ispair(X)             (((X)->object.p[1]) != (nil))
 
 obj *omake(enum otype type, int count, ...) {
   obj *newobj;
@@ -155,7 +159,7 @@ obj *omake(enum otype type, int count, ...) {
 				newobj->object.proc[i] = va_arg(ap, obj *);
 				break;
 			default:
-				newobj->p[i] = va_arg(ap, obj *);
+				newobj->object.p[i] = va_arg(ap, obj *);
 				break;
 		}
 	}
@@ -573,3 +577,4 @@ void myexit(int code) {
   fprintf(stderr, "%d bytes left hanging\n", total_malloc);
   exit(code);
 }
+
