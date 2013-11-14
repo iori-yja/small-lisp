@@ -28,24 +28,29 @@
 int line_num = 1;
 int total_malloc = 0;
 
+typedef struct {
+	int num;
+	unsigned int denomi;
+} rational_t;
+
 /*** List Structured Memory ***/
-enum otype { NIL, TEE, COFFEE, INT, REAL, RATIONAL, SYM, CONS, PROC, PRIMOP };
+enum otype { NIL, TEE, COFFEE, INT, REAL, RATIONAL, STRLITERAL, SYM,
+	CONS, PROC, PRIMOP };
 typedef struct obj {
-  enum otype type;
-  int line_num;
+	enum otype type;
+	int line_num;
 	union {
 		int integer;
 		double real;
-		struct {
-			int num;
-			unsigned int denomi;
-		} rational;
+		rational_t rational;
+		char *strliteral;
 		char *symbol;
 		struct obj *primop;
 		struct obj *proc[3];
 		struct obj *p[2];
 	} object;
 } obj;
+
 typedef obj * (*primop)(obj *);
 obj *all_symbols, *top_env, *nil, *tee, *coffee, *quote, 
     *s_if, *s_lambda, *s_define, *s_setb, *s_begin, *s_let;
@@ -67,16 +72,16 @@ obj *car(obj *X) {
 }
 
 obj *cdr(obj *X) {
-  if (X == nil)
-    return nil;
-  if (X->type != CONS) {
-    fprintf(stderr, "warning: cdr argument not a list on line %d\n", X->line_num); 
-    return nil;    
-  }
-  if (X->object.p[1] == 0) {
-    fprintf(stderr, "error: cdr list element is zero-pointer at %d\n", X->line_num);
-    return nil;
-  }
+	if (X == nil)
+		return nil;
+	if (X->type != CONS) {
+		fprintf(stderr, "warning: cdr argument not a list on line %d\n", X->line_num); 
+		return nil;    
+	}
+	if (X->object.p[1] == 0) {
+		fprintf(stderr, "error: cdr list element is zero-pointer at %d\n", X->line_num);
+		return nil;
+	}
 	if (X->type == PROC)
 		return X->object.proc[1];
 	else
@@ -114,6 +119,19 @@ obj *cdr(obj *X) {
 
 #define mkint(X)              omake(INT, 1, (X))
 #define intval(X)             ((int)((X)->type == INT ? (X)->object.integer : 0)) // intval for INT only
+#define isint(X)              ((X)->type == INT)
+
+#define mkreal(X)             omake(REAL, 1, (X))
+#define realval(X)            ((double)((X)->type == REAL ? (X)->object.real : 0))
+#define isreal(X)             ((X)->type == REAL)
+
+#define mkrat(NUM, DENOMI)   omake(RATIONAL, 2, (NUM), (DENOMI))
+#define ratval(X)            ((rational_t)((X)->type == RATIONAL ? (X)->object.rational : 0))
+#define israt(X)             ((X)->type == RATIONAL)
+
+#define mkstrlit(X)          omake(STRLITERAL, (X))
+#define strlitval(X)         ((char *)((X)->type == STRLITERAL ? (X)->object.strliteral : 0))
+#define isstrlit(X)         ((X)->type == STRLITERAL)
 
 #define mksym(X)              omake(SYM, 1, (X))
 #define symname(X)            ((char *)((X)->object.symbol))
@@ -149,6 +167,18 @@ obj *omake(enum otype type, int count, ...) {
 			case INT:
 				newobj->object.integer = va_arg(ap, int);
 				break;
+			case REAL:
+				newobj->object.real = va_arg(ap, double);
+				break;
+			case RATIONAL:
+				if (!i) // rational is (num / denomi), so args is mkrat(num, denomi)
+					newobj->object.rational.num = va_arg(ap, int);
+				else
+					newobj->object.rational.denomi = va_arg(ap, unsigned int);
+				break;
+			case STRLITERAL:
+				newobj->object.strliteral = va_arg(ap, char *);
+				break;
 			case SYM:
 				newobj->object.symbol = va_arg(ap, char *);
 				break;
@@ -158,8 +188,10 @@ obj *omake(enum otype type, int count, ...) {
 			case PROC:
 				newobj->object.proc[i] = va_arg(ap, obj *);
 				break;
-			default:
+			case CONS:
 				newobj->object.p[i] = va_arg(ap, obj *);
+				break;
+			default:
 				break;
 		}
 	}
@@ -279,6 +311,10 @@ obj *readobj() {
      || (token[0] == '-' && strlen(token) > 1)) //!!!
     return mkint(atoi(token));
 
+  else if (token[strspn(token, "0123456789.")] == '\0'
+     || (token[0] == '-' && strlen(token) > 1)) //!!!
+    return mkreal(atof(token));
+
 	if (!strcmp(token, "#f")) return coffee;
 	if (!strcmp(token, "#t")) return tee;
   return intern(token);
@@ -301,18 +337,25 @@ obj *readlist() {
 void writeobj(FILE *ofp, obj *op) {
   switch(op->type) {
 		case NIL:
-		fprintf(ofp, "()");
-		break;
+			fprintf(ofp, "()");
+			break;
 
 		case TEE:
-		fprintf(ofp, "#t");
-		break;
+			fprintf(ofp, "#t");
+			break;
 
 		case COFFEE:
-		fprintf(ofp, "#f");
-		break;
+			fprintf(ofp, "#f");
+			break;
 
-    case INT:  fprintf(ofp, "%d", intval(op)); break;
+    case INT:
+			fprintf(ofp, "%d", intval(op));
+			break;
+
+		case REAL:
+			fprintf(ofp, "%lf", realval(op));
+			break;
+
     case CONS: 
 		fprintf(ofp, "(");
 		for(;;) {
@@ -354,22 +397,17 @@ obj *tmp, *proc, *vals;
 
 	switch (exp->type) {
 		case NIL:
-			return nil;
-
 		case TEE:
-			return tee;
-
 		case COFFEE:
-			return coffee;
-
 		case INT:
+		case REAL:
+		case RATIONAL:
 			return exp;
 
 		case SYM:
 			tmp = assoc(exp, env);
 
 			if (tmp == nil) {
-	debb:
         fprintf(stderr, "Unbound symbol ");
         writeobj(stderr, exp);
         fprintf(stderr, "\n");
@@ -443,35 +481,121 @@ obj *evlis(obj *exps, obj *env) {
 }
 
 /*** Primitives ***/
-obj *prim_sum(obj *args) {
-  int sum;
-  for(sum = 0; !isnil(args); sum += intval(car(args)), args = cdr(args));
-  return mkint(sum);
+obj *
+numfold(
+		int(*intmath)(int, int),
+		double(*realmath)(double, double),
+		obj *initial, obj *args)
+{
+	/* assume all symbol is int */
+	int folded;
+	double ffolded;
+
+	if (initial->type == INT)
+		folded = initial->object.integer;
+	else if (initial->type == REAL) {
+		ffolded = initial->object.real;
+		goto foldreal;
+	}
+
+	for (; !isnil(args); args = cdr(args)) {
+		if (car(args)->type == INT)
+			folded = intmath(folded, intval(car(args)));
+		else {
+			/* fail to assume all symbol is int
+			 * so we're going into floating point */
+			ffolded = (double) folded;
+			goto foldreal;
+		}
+	}
+	return mkint(folded);
+
+foldreal:
+	for (ffolded = (double) folded; !isnil(args); args = cdr(args)) {
+		if (car(args)->type == INT)
+			ffolded = realmath(ffolded, (double) intval(car(args)));
+		else if (car(args)->type == REAL)
+			ffolded = realmath(ffolded, realval(car(args)));
+		else
+			abort();
+	}
+	return mkreal(ffolded);
 }
 
-obj *prim_sub(obj *args) {
-  int sum;
-  for(sum = intval(car(args)), args = cdr(args); 
-      !isnil(args); 
-      sum -= intval(car(args)), args = cdr(args));
-  return mkint(sum);
+/* plus */
+int
+__intplus(int s, int t)
+{
+	return s + t;
 }
 
-obj *prim_prod(obj *args) {
-  int prod;
-  for(prod = 1; !isnil(args); prod *= intval(car(args)), args = cdr(args));
-  return mkint(prod);
+double
+__realplus(double s, double t)
+{
+	return s + t;
 }
 
-obj *prim_divide(obj *args) {
-  int prod = intval(car(args));
-  args = cdr(args);
-  while(!isnil(args)) {
-    prod /= intval(car(args));
-    args = cdr(args);
-  }
+obj *
+prim_sum(obj *args)
+{
+	return numfold(__intplus, __realplus, car(args), cdr(args));
+}
 
-  return mkint(prod);
+/* subtract */
+int
+__intsub(int s, int t)
+{
+	return s - t;
+}
+
+double
+__realsub(double s, double t)
+{
+	return s - t;
+}
+
+obj *
+prim_sub(obj *args)
+{
+	return numfold(__intsub, __realsub, car(args), cdr(args));
+}
+
+/* product */
+int
+__intprod(int s, int t)
+{
+	return s * t;
+}
+
+double
+__realprod(double s, double t)
+{
+	return s * t;
+}
+
+obj *
+prim_prod(obj *args)
+{
+	return numfold(__intprod, __realprod, car(args), cdr(args));
+}
+
+/* division */
+int
+__intdiv(int s, int t)
+{
+	return s / t;
+}
+
+double
+__realdiv(double s, double t)
+{
+	return s / t;
+}
+
+obj *
+prim_divide(obj *args)
+{
+	return numfold(__intdiv, __realdiv, car(args), cdr(args));
 }
 
 obj *prim_gt(obj *args) {
@@ -490,7 +614,7 @@ obj *prim_le(obj *args) {
 obj *prim_numeq(obj *args) {
   return intval(car(args)) == intval(car(cdr(args))) ? tee : coffee;
 }
-obj *prim_symtable(obj *args) {
+obj *prim_symtable(void) {
 	writeobj(stderr,all_symbols);
 	return nil;
 }
