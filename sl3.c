@@ -308,11 +308,13 @@ obj *readobj() {
   if (!strcmp(token, "\'")) return cons(quote, cons(readobj(), nil));
 
   if (token[strspn(token, "0123456789")] == '\0'
-     || (token[0] == '-' && strlen(token) > 1)) //!!!
+     || (token[0] == '-' && strlen(token) > 1 &&
+			 token[strspn(token + 1, "0123456789") + 1] == '\0')) //!!!
     return mkint(atoi(token));
 
   else if (token[strspn(token, "0123456789.")] == '\0'
-     || (token[0] == '-' && strlen(token) > 1)) //!!!
+     || (token[0] == '-' && strlen(token) > 1 &&
+			 token[strspn(token + 1, "0123456789.") + 1] == '\0')) //!!!
     return mkreal(atof(token));
 
 	if (!strcmp(token, "#f")) return coffee;
