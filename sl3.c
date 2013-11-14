@@ -302,23 +302,34 @@ obj *readlist();
 
 obj *readobj() {
   char *token;
+	int vinculum; 
 
   token = gettoken();
   if (!strcmp(token, "(")) return readlist();
   if (!strcmp(token, "\'")) return cons(quote, cons(readobj(), nil));
-
-  if (token[strspn(token, "0123456789")] == '\0'
-     || (token[0] == '-' && strlen(token) > 1 &&
-			 token[strspn(token + 1, "0123456789") + 1] == '\0')) //!!!
-    return mkint(atoi(token));
-
-  else if (token[strspn(token, "0123456789.")] == '\0'
-     || (token[0] == '-' && strlen(token) > 1 &&
-			 token[strspn(token + 1, "0123456789.") + 1] == '\0')) //!!!
-    return mkreal(atof(token));
-
 	if (!strcmp(token, "#f")) return coffee;
 	if (!strcmp(token, "#t")) return tee;
+
+  if (token[(vinculum = strspn(token, "0123456789"))] == '\0'
+     || (token[0] == '-' && strlen(token) > 1 &&
+			 token[strspn(token + 1, "0123456789") + 1] == '\0'))
+    return mkint(atoi(token));
+
+  else if ((token[strspn(token, "0123456789.")] == '\0'
+				&& strlen(token) > 2)
+			|| (token[0] == '-' && strlen(token) > 2 &&
+				token[strspn(token + 1, "0123456789.") + 1] == '\0'))
+    return mkreal(atof(token));
+
+  else if ((token[strspn(token, "0123456789/")] == '\0'
+				&& strlen(token) > 3)
+			|| (token[0] == '-' && strlen(token) > 3 &&
+			 token[strspn(token + 1, "0123456789/") + 1] == '\0')) {
+		printf("%s token\n", token);
+		token[vinculum] = '\0';
+		return mkrat(atoi(token), atoi(token + vinculum + 1));
+	}
+
   return intern(token);
 }
 
@@ -513,7 +524,7 @@ numfold(
 	return mkint(folded);
 
 foldreal:
-	for (ffolded = (double) folded; !isnil(args); args = cdr(args)) {
+	for (; !isnil(args); args = cdr(args)) {
 		if (car(args)->type == INT)
 			ffolded = realmath(ffolded, (double) intval(car(args)));
 		else if (car(args)->type == REAL)
