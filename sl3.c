@@ -51,9 +51,17 @@ typedef struct obj {
 	} object;
 } obj;
 
+typedef struct {
+		int (* intmath)();
+		double (* realmath)();
+		rational_t (* ratmath)();
+} manipulations_t;
+
 typedef obj * (*primop)(obj *);
 obj *all_symbols, *top_env, *nil, *tee, *coffee, *quote, 
     *s_if, *s_lambda, *s_define, *s_setb, *s_begin, *s_let;
+
+unsigned int bgcd(int, int);
 
 #define cons(X, Y)            omake(CONS, 2, (X), (Y))
 
@@ -126,7 +134,7 @@ obj *cdr(obj *X) {
 #define isreal(X)             ((X)->type == REAL)
 
 #define mkrat(NUM, DENOMI)   omake(RATIONAL, 2, (NUM), (DENOMI))
-#define ratval(X)            ((rational_t)((X)->type == RATIONAL ? (X)->object.rational : 0))
+#define ratval(X)            ((rational_t)((X)->object.rational))
 #define israt(X)             ((X)->type == RATIONAL)
 
 #define mkstrlit(X)          omake(STRLITERAL, (X))
@@ -312,7 +320,7 @@ obj *readobj() {
 
   if (token[(vinculum = strspn(token, "0123456789"))] == '\0'
      || (token[0] == '-' && strlen(token) > 1 &&
-			 token[strspn(token + 1, "0123456789") + 1] == '\0'))
+			 token[vinculum = strspn(token + 1, "0123456789") + 1] == '\0'))
     return mkint(atoi(token));
 
   else if ((token[strspn(token, "0123456789.")] == '\0'
@@ -322,10 +330,13 @@ obj *readobj() {
     return mkreal(atof(token));
 
   else if ((token[strspn(token, "0123456789/")] == '\0'
-				&& strlen(token) > 3)
-			|| (token[0] == '-' && strlen(token) > 3 &&
+				&& strlen(token) > 2)){
+		token[vinculum] = '\0';
+		return mkrat(atoi(token), atoi(token + vinculum + 1));
+	}
+
+	else if ((token[0] == '-' && strlen(token) > 3 &&
 			 token[strspn(token + 1, "0123456789/") + 1] == '\0')) {
-		printf("%s token\n", token);
 		token[vinculum] = '\0';
 		return mkrat(atoi(token), atoi(token + vinculum + 1));
 	}
@@ -348,6 +359,10 @@ obj *readlist() {
 }
 
 void writeobj(FILE *ofp, obj *op) {
+	int num;
+	unsigned int denomi;
+	int gcd;
+
   switch(op->type) {
 		case NIL:
 			fprintf(ofp, "()");
@@ -367,6 +382,13 @@ void writeobj(FILE *ofp, obj *op) {
 
 		case REAL:
 			fprintf(ofp, "%lf", realval(op));
+			break;
+
+		case RATIONAL:
+			gcd = bgcd(ratval(op).num, (int) ratval(op).denomi);
+			if (gcd == 0)
+				abort();
+			fprintf(ofp, "%d/%u", ratval(op).num/gcd, ratval(op).denomi/gcd);
 			break;
 
     case CONS: 
@@ -496,13 +518,13 @@ obj *evlis(obj *exps, obj *env) {
 /*** Primitives ***/
 obj *
 numfold(
-		int(*intmath)(int, int),
-		double(*realmath)(double, double),
+		manipulations_t *functs,
 		obj *initial, obj *args)
 {
 	/* assume all symbol is int */
 	int folded;
 	double ffolded;
+	rational_t rfolded;
 
 	if (initial->type == INT)
 		folded = initial->object.integer;
@@ -510,29 +532,102 @@ numfold(
 		ffolded = initial->object.real;
 		goto foldreal;
 	}
+	else if (initial->type == RATIONAL) {
+		rfolded = initial->object.rational;
+		goto foldrational;
+	}
 
 	for (; !isnil(args); args = cdr(args)) {
 		if (car(args)->type == INT)
-			folded = intmath(folded, intval(car(args)));
-		else {
+			folded = functs->intmath(folded, intval(car(args)));
+		else if(car(args)->type == REAL) {
 			/* fail to assume all symbol is int
 			 * so we're going into floating point */
 			ffolded = (double) folded;
 			goto foldreal;
 		}
+		else if(car(args)->type == RATIONAL) {
+			rfolded.num = folded;
+			rfolded.denomi = 1;
+			goto foldrational;
+		}
+		else abort();
 	}
 	return mkint(folded);
+
+foldrational:
+	for (; !isnil(args); args = cdr(args)) {
+		if (car(args)->type == INT) {
+			rational_t tmp = {intval(car(args)), 1};
+			rfolded = functs->ratmath(rfolded, tmp);
+		}
+		else if (car(args)->type == RATIONAL) {
+			rfolded = functs->ratmath(rfolded, ratval(car(args)));
+		}
+		else if (car(args)->type == REAL) {
+			ffolded = (((double) rfolded.num) / ((double) rfolded.denomi));
+			goto foldreal;
+		}
+		else
+			abort();
+	}
+	return mkrat(rfolded.num, rfolded.denomi);
 
 foldreal:
 	for (; !isnil(args); args = cdr(args)) {
 		if (car(args)->type == INT)
-			ffolded = realmath(ffolded, (double) intval(car(args)));
+			ffolded = functs->realmath(ffolded, (double) intval(car(args)));
 		else if (car(args)->type == REAL)
-			ffolded = realmath(ffolded, realval(car(args)));
+			ffolded = functs->realmath(ffolded, realval(car(args)));
+		else if (car(args)->type == RATIONAL) {
+			rational_t tmp = ratval(car(args));
+			ffolded = functs->realmath(ffolded, ((double) tmp.num / (double) tmp.denomi));
+		}
 		else
 			abort();
 	}
 	return mkreal(ffolded);
+}
+
+unsigned int
+bgcd(int u, int v)
+{
+  int shift;
+ 
+  /* GCD(0,v) == v; GCD(u,0) == u, GCD(0,0) == 0 */
+  if (u == 0) return v;
+  if (v == 0) return u;
+  if (u < 0) u = - u;
+  if (v < 0) v = -v;
+ 
+  /* Let shift := lg K, where K is the greatest power of 2
+        dividing both u and v. */
+  for (shift = 0; ((u | v) & 1) == 0; ++shift) {
+         u >>= 1;
+         v >>= 1;
+  }
+ 
+  while ((u & 1) == 0)
+    u >>= 1;
+ 
+  /* From here on, u is always odd. */
+  do {
+       /* remove all factors of 2 in v -- they are not common */
+       /*   note: v is not zero, so while will terminate */
+       while ((v & 1) == 0)  /* Loop X */
+           v >>= 1;
+ 
+       /* Now u and v are both odd. Swap if necessary so u <= v,
+          then set v = v - u (which is even). For bignums, the
+          swapping is just pointer movement, and the subtraction
+          can be done in-place. */
+       if (u > v) {
+         unsigned int t = v; v = u; u = t;}  // Swap u and v.
+       v = v - u;                       // Here v >= u.
+     } while (v != 0);
+ 
+  /* restore common factors of 2 */
+  return u << shift;
 }
 
 /* plus */
@@ -548,10 +643,47 @@ __realplus(double s, double t)
 	return s + t;
 }
 
+#define ismultiple(X, Y) (((X) > (2 * (Y))) ? ((X) > (Y)) ? (((X) % (Y)) == 0) : (((Y) % (X)) == 0) : ((X) == (2 * (Y))) ? 1 : 0)
+
+rational_t
+__ratplus(rational_t s, rational_t t)
+{
+	unsigned int ds, dt;
+	rational_t ret;
+
+	if ((ds = s.denomi) == (dt = t.denomi)) {
+		ret.num = s.num + t.num;
+		ret.denomi = ds;
+	}
+	else if ((ds > dt) && ismultiple(ds, dt)) {
+		ret.num = s.num + (t.num * (int) (ds / dt));
+		ret.denomi = ds;
+	}
+	else if ((ds < dt) && ismultiple(dt, ds)) {
+		ret.num = (s.num * (int) (dt / ds)) + t.num;
+		ret.denomi = dt;
+	}
+	else {
+		ret.num = s.num * ((int) dt) + t.num * ((int) ds);
+		ret.denomi = dt * ds;
+		if (ret.num < (s.num * ((int) dt)) || ret.denomi < dt ) {
+			int g = bgcd(ret.num, (int) ret.denomi);
+			ret.num /= g;
+			ret.denomi /= g;
+		}
+	}
+	return ret;
+}
+
 obj *
 prim_sum(obj *args)
 {
-	return numfold(__intplus, __realplus, car(args), cdr(args));
+	manipulations_t m = {
+		__intplus,
+		__realplus,
+		__ratplus,
+	};
+	return numfold(&m, car(args), cdr(args));
 }
 
 /* subtract */
@@ -567,10 +699,45 @@ __realsub(double s, double t)
 	return s - t;
 }
 
+rational_t
+__ratsub(rational_t s, rational_t t)
+{
+	int ds, dt;
+	rational_t ret;
+
+	if ((ds = s.denomi) != (dt = t.denomi)) {
+		ret.num = s.num * dt - t.num * ds;
+		ret.denomi = dt * ds;
+		if (ret.num < (s.num * dt) || ret.denomi < dt ) {
+			int g = bgcd(ret.num, ret.denomi);
+			ret.num /= g;
+			ret.denomi /= g;
+		}
+	}
+	else if ((ds > dt) && ismultiple(ds, dt)) {
+		ret.num = s.num - (t.num * ds / dt);
+		ret.denomi = ds;
+	}
+	else if ((ds < dt) && ismultiple(dt, ds)) {
+		ret.num = (s.num * dt / ds) - t.num;
+		ret.denomi = dt;
+	}
+	else {
+		ret.num = s.num - t.num;
+		ret.denomi = ds;
+	}
+	return ret;
+}
+
 obj *
 prim_sub(obj *args)
 {
-	return numfold(__intsub, __realsub, car(args), cdr(args));
+	manipulations_t m = {
+		__intsub,
+		__realsub,
+		__ratsub,
+	};
+	return numfold(&m, car(args), cdr(args));
 }
 
 /* product */
@@ -586,10 +753,21 @@ __realprod(double s, double t)
 	return s * t;
 }
 
+rational_t
+__ratprod(rational_t s, rational_t t)
+{
+	
+}
+
 obj *
 prim_prod(obj *args)
 {
-	return numfold(__intprod, __realprod, car(args), cdr(args));
+	manipulations_t m = {
+		__intprod,
+		__realprod,
+		__ratprod,
+	};
+	return numfold(&m, car(args), cdr(args));
 }
 
 /* division */
@@ -605,10 +783,21 @@ __realdiv(double s, double t)
 	return s / t;
 }
 
+rational_t
+__ratdiv(rational_t s, rational_t t)
+{
+	
+}
+
 obj *
 prim_divide(obj *args)
 {
-	return numfold(__intdiv, __realdiv, car(args), cdr(args));
+	manipulations_t m = {
+		__intdiv,
+		__realdiv,
+		__ratdiv,
+	};
+	return numfold(&m, car(args), cdr(args));
 }
 
 obj *prim_gt(obj *args) {
