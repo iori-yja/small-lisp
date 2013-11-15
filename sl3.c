@@ -699,32 +699,33 @@ __realsub(double s, double t)
 	return s - t;
 }
 
+
 rational_t
 __ratsub(rational_t s, rational_t t)
 {
-	int ds, dt;
+	unsigned int ds, dt;
 	rational_t ret;
 
-	if ((ds = s.denomi) != (dt = t.denomi)) {
-		ret.num = s.num * dt - t.num * ds;
-		ret.denomi = dt * ds;
-		if (ret.num < (s.num * dt) || ret.denomi < dt ) {
-			int g = bgcd(ret.num, ret.denomi);
-			ret.num /= g;
-			ret.denomi /= g;
-		}
+	if ((ds = s.denomi) == (dt = t.denomi)) {
+		ret.num = s.num - t.num;
+		ret.denomi = ds;
 	}
 	else if ((ds > dt) && ismultiple(ds, dt)) {
-		ret.num = s.num - (t.num * ds / dt);
+		ret.num = s.num - (t.num * (int) (ds / dt));
 		ret.denomi = ds;
 	}
 	else if ((ds < dt) && ismultiple(dt, ds)) {
-		ret.num = (s.num * dt / ds) - t.num;
+		ret.num = (s.num * (int) (dt / ds)) - t.num;
 		ret.denomi = dt;
 	}
 	else {
-		ret.num = s.num - t.num;
-		ret.denomi = ds;
+		ret.num = s.num * ((int) dt) - t.num * ((int) ds);
+		ret.denomi = dt * ds;
+		if (ret.num < (s.num * ((int) dt)) || ret.denomi < dt ) {
+			int g = bgcd(ret.num, (int) ret.denomi);
+			ret.num /= g;
+			ret.denomi /= g;
+		}
 	}
 	return ret;
 }
@@ -756,7 +757,32 @@ __realprod(double s, double t)
 rational_t
 __ratprod(rational_t s, rational_t t)
 {
-	
+	int ns = 1;
+	rational_t tmp;
+	int flag = 0;
+	unsigned int dt = 1;
+
+	while (flag < 2) {
+		if (s.num > (int) t.denomi &&
+			ismultiple(s.num, (int) t.denomi)) {
+			ns *= (s.num / (int) t.denomi);
+		}
+		else if (s.num < (int) t.denomi &&
+			ismultiple((int) t.denomi, s.num)) {
+			dt *= (((int) t.denomi) / s.num);
+		}
+		else {
+			dt *= t.denomi;
+			ns *= s.num;
+		}
+		tmp = t;
+		t = s;
+		s = tmp;
+		flag++;
+	}
+	tmp.num = ns;
+	tmp.denomi = dt;
+	return tmp;
 }
 
 obj *
