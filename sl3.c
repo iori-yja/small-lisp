@@ -1,5 +1,6 @@
 /* A minimal Lisp interpreter
    Copyright 2004 Andru Luvisi
+   Copyright 2013 Iori YONEJI
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -359,8 +360,6 @@ obj *readlist() {
 }
 
 void writeobj(FILE *ofp, obj *op) {
-	int num;
-	unsigned int denomi;
 	int gcd;
 
   switch(op->type) {
@@ -703,31 +702,8 @@ __realsub(double s, double t)
 rational_t
 __ratsub(rational_t s, rational_t t)
 {
-	unsigned int ds, dt;
-	rational_t ret;
-
-	if ((ds = s.denomi) == (dt = t.denomi)) {
-		ret.num = s.num - t.num;
-		ret.denomi = ds;
-	}
-	else if ((ds > dt) && ismultiple(ds, dt)) {
-		ret.num = s.num - (t.num * (int) (ds / dt));
-		ret.denomi = ds;
-	}
-	else if ((ds < dt) && ismultiple(dt, ds)) {
-		ret.num = (s.num * (int) (dt / ds)) - t.num;
-		ret.denomi = dt;
-	}
-	else {
-		ret.num = s.num * ((int) dt) - t.num * ((int) ds);
-		ret.denomi = dt * ds;
-		if (ret.num < (s.num * ((int) dt)) || ret.denomi < dt ) {
-			int g = bgcd(ret.num, (int) ret.denomi);
-			ret.num /= g;
-			ret.denomi /= g;
-		}
-	}
-	return ret;
+	s.num = s.num * -1;
+	return __ratplus(s, t);
 }
 
 obj *
@@ -812,7 +788,12 @@ __realdiv(double s, double t)
 rational_t
 __ratdiv(rational_t s, rational_t t)
 {
-	
+	int tmp;
+	tmp = t.num;
+	t.num = t.denomi;
+	t.denomi = tmp;
+
+	return __ratprod(s, t);
 }
 
 obj *
