@@ -26,12 +26,12 @@ Once the interpreter is running, you could try
 (print 'first element 'of 'list 'X 'is (cdr X))
 ```
 
-```Todo
+```todo
 - To port for MCU like OpenSPARC, Cortex-Mx or ARM7.
-- Imprement copy GC.
+- Implement copy GC.
 ```
 
-```Portablility
+```portablility
 - printf
 - getc
 - malloc
