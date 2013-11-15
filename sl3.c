@@ -138,8 +138,8 @@ obj *cdr(obj *X) {
 #define ratval(X)            ((rational_t)((X)->object.rational))
 #define israt(X)             ((X)->type == RATIONAL)
 
-#define mkstrlit(X)          omake(STRLITERAL, (X))
-#define strlitval(X)         ((char *)((X)->type == STRLITERAL ? (X)->object.strliteral : 0))
+#define mkstrlit(X)          omake(STRLITERAL, 1, (X))
+#define strlitval(X)         ((char *)((X)->type == STRLITERAL ? (X)->object.strliteral : ""))
 #define isstrlit(X)         ((X)->type == STRLITERAL)
 
 #define mksym(X)              omake(SYM, 1, (X))
@@ -341,6 +341,11 @@ obj *readobj() {
 		token[vinculum] = '\0';
 		return mkrat(atoi(token), atoi(token + vinculum + 1));
 	}
+	else if ((token[0] == '"' && token[strlen(token) - 1] == '"') ||
+			(token[0] == '\'' && token[strlen(token) - 1] == '\'')) {
+		token[strlen(token) - 1] = '\0';
+		return mkstrlit(token + 1);
+	}
 
   return intern(token);
 }
@@ -390,6 +395,10 @@ void writeobj(FILE *ofp, obj *op) {
 			fprintf(ofp, "%d/%u", ratval(op).num/gcd, ratval(op).denomi/gcd);
 			break;
 
+		case STRLITERAL:
+			fprintf(ofp, "%s", strlitval(op));
+			break;
+
     case CONS: 
 		fprintf(ofp, "(");
 		for(;;) {
@@ -436,6 +445,7 @@ obj *tmp, *proc, *vals;
 		case INT:
 		case REAL:
 		case RATIONAL:
+		case STRLITERAL:
 			return exp;
 
 		case SYM:
