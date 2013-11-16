@@ -35,8 +35,11 @@ typedef struct {
 } rational_t;
 
 /*** List Structured Memory ***/
-enum otype { NIL, TEE, COFFEE, INT, REAL, RATIONAL, STRLITERAL, SYM,
-	CONS, PROC, PRIMOP };
+enum otype { INT, REAL, RATIONAL, STRLITERAL, SYM,
+	PROC, PRIMOP, NIL, TEE, COFFEE,
+	CONS = 0x400, CONSINT, CONSREAL, CONSRAT, CONSSTR, CONSSYM,
+	CONSPROC, CONSPRIMOP, CONSNIL, CONSTEE, CONSCOFFEE,
+	};
 typedef struct obj {
 	enum otype type;
 	int line_num;
@@ -48,8 +51,9 @@ typedef struct obj {
 		char *symbol;
 		struct obj *primop;
 		struct obj *proc[3];
-		struct obj *p[2];
+		struct obj *car;
 	} object;
+	struct obj *cdr;
 } obj;
 
 typedef struct {
@@ -67,34 +71,39 @@ unsigned int bgcd(int, int);
 #define cons(X, Y)            omake(CONS, 2, (X), (Y))
 
 obj *car(obj *X) {
-  if (X == 0) {
+  if (X == NULL) {
     fprintf(stderr, "warning: car argument null on line %d\n", line_num);
     return nil;
   }
   if (X == nil)
     return nil;
-  if (X->type != CONS) {
-    fprintf(stderr, "warning: car argument not a list (%d) on line %d\n", (int) X->object.integer, (int) X->line_num);
-    return nil;
-  }
-  return X->object.p[0];
+  if (X->type == CONS)
+		return X->object.car;
+
+	if (X->type > CONS) {
+		newobj.type = X->type - CONSINT;
+		newobj.object = X->object;
+		return &newobj;
+	}
+	fprintf(stderr, "warning: car argument not a list (%d) on line %d\n", (int) X->object.integer, (int) X->line_num);
+	return nil;
 }
 
 obj *cdr(obj *X) {
 	if (X == nil)
 		return nil;
-	if (X->type != CONS) {
-		fprintf(stderr, "warning: cdr argument not a list on line %d\n", X->line_num); 
-		return nil;    
-	}
-	if (X->object.p[1] == 0) {
+	if (X->cdr == 0) {
 		fprintf(stderr, "error: cdr list element is zero-pointer at %d\n", X->line_num);
 		return nil;
 	}
 	if (X->type == PROC)
 		return X->object.proc[1];
-	else
-		return X->object.p[1];
+	else if (X->type >= CONS)
+		return X->cdr;
+	else if (X->type < CONS) {
+		fprintf(stderr, "warning: cdr argument not a list on line %d\n", X->line_num); 
+		return nil;    
+	}
 }
 
 
@@ -127,7 +136,7 @@ obj *cdr(obj *X) {
 #define iscoffee(X)           ((X)->type == COFFEE)
 
 #define mkint(X)              omake(INT, 1, (X))
-#define intval(X)             ((int)((X)->type == INT ? (X)->object.integer : 0)) // intval for INT only
+#define intval(X)             ((int)(((X)->type & ~CONS) == INT ? (X)->object.integer : 0)) // intval for INT only
 #define isint(X)              ((X)->type == INT)
 
 #define mkreal(X)             omake(REAL, 1, (X))
@@ -159,6 +168,7 @@ obj *omake(enum otype type, int count, ...) {
   obj *newobj;
   va_list ap;
   int i;
+	obj *tmp;
   va_start(ap, count);
   int object_size = sizeof(obj) + (count - 1)*sizeof(obj *);
   total_malloc += object_size;
@@ -180,10 +190,10 @@ obj *omake(enum otype type, int count, ...) {
 				newobj->object.real = va_arg(ap, double);
 				break;
 			case RATIONAL:
-				if (!i) // rational is (num / denomi), so args is mkrat(num, denomi)
-					newobj->object.rational.num = va_arg(ap, int);
-				else
+				if (i) // rational is (num / denomi), so args is mkrat(num, denomi)
 					newobj->object.rational.denomi = va_arg(ap, unsigned int);
+				else
+					newobj->object.rational.num = va_arg(ap, int);
 				break;
 			case STRLITERAL:
 				newobj->object.strliteral = va_arg(ap, char *);
@@ -198,7 +208,18 @@ obj *omake(enum otype type, int count, ...) {
 				newobj->object.proc[i] = va_arg(ap, obj *);
 				break;
 			case CONS:
-				newobj->object.p[i] = va_arg(ap, obj *);
+				if (i == 0) {
+					tmp = va_arg(ap, obj *);
+					if (tmp->type < CONS) {
+						newobj->object = tmp->object;
+						newobj->type = tmp->type + CONSINT;
+						free(tmp);
+					}
+					else
+						newobj->object.car = tmp;
+					break;
+				}
+				newobj->cdr = va_arg(ap, obj *);
 				break;
 			default:
 				break;
@@ -400,6 +421,16 @@ void writeobj(FILE *ofp, obj *op) {
 			break;
 
     case CONS: 
+    case CONSINT: 
+    case CONSREAL: 
+    case CONSRAT: 
+    case CONSSTR: 
+    case CONSSYM: 
+		case CONSPROC:
+		case CONSPRIMOP:
+		case CONSTEE:
+		case CONSCOFFEE:
+		case CONSNIL:
 		fprintf(ofp, "(");
 		for(;;) {
 			writeobj(ofp, car(op));
@@ -423,7 +454,7 @@ void writeobj(FILE *ofp, obj *op) {
 		break;
     case PRIMOP: fprintf(ofp, "#<PRIMOP>"); break;
     case PROC:   fprintf(ofp, "#<PROC>"); break;
-    default: exit(1);
+    default: exit(11);
   }
 }
 
@@ -460,6 +491,16 @@ obj *tmp, *proc, *vals;
       return cdr(tmp);
 
     case CONS: 
+    case CONSINT: 
+    case CONSREAL: 
+    case CONSRAT: 
+    case CONSSTR: 
+    case CONSSYM: 
+		case CONSPROC:
+		case CONSPRIMOP:
+		case CONSTEE:
+		case CONSCOFFEE:
+		case CONSNIL:
       if (car(exp) == s_if) {
         if (eval(car(cdr(exp)), env) != coffee)
           return eval(car(cdr(cdr(exp))), env);
